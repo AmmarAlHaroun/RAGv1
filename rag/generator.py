@@ -12,6 +12,10 @@ load_dotenv(dotenv_path=ENV_FILE)
 
 MODEL = os.getenv("GEMINI_MODEL") or os.getenv("OPENAI_MODEL")
 MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "512"))
+RETRY_MAX_OUTPUT_TOKENS = max(
+    int(os.getenv("GEMINI_RETRY_MAX_OUTPUT_TOKENS", "2048")),
+    MAX_OUTPUT_TOKENS,
+)
 TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.2"))
 REASONING_EFFORT = (os.getenv("GEMINI_REASONING_EFFORT") or "minimal").strip().lower()
 API_KEY = (
@@ -101,6 +105,39 @@ def _clean_answer(raw_content):
     return answer.replace("*", "").strip() or UNSUPPORTED_ANSWER
 
 
+def _request_completion(question, context, max_tokens, retry=False):
+    retry_instruction = ""
+    if retry:
+        retry_instruction = """
+The previous attempt was cut off before it finished. Rewrite the complete
+answer from the reference material. Include every requested point, finish
+the last bullet, and do not mention this retry.
+"""
+
+    return client.chat.completions.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        temperature=TEMPERATURE,
+        reasoning_effort=REASONING_EFFORT,
+        messages=[
+            {"role": "system", "content": INSTRUCTIONS},
+            {"role": "user", "content": f"""
+Reference material:
+
+<context>
+{context}
+</context>
+
+User question:
+{question}
+
+Return only the final answer text, with no code fence or extra text.
+{retry_instruction}
+"""},
+        ],
+    )
+
+
 def generate_answer(question, context):
     global client
     question = question or ""
@@ -117,27 +154,19 @@ def generate_answer(question, context):
             api_key=API_KEY,
             base_url=BASE_URL,
         )
-    response = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=MAX_OUTPUT_TOKENS,
-        temperature=TEMPERATURE,
-        reasoning_effort=REASONING_EFFORT,
-        messages=[
-            {"role": "system", "content": INSTRUCTIONS},
-            {"role": "user", "content": f"""
-Reference material:
-
-<context>
-{context}
-</context>
-
-User question:
-{question}
-
-Return only the final answer text, with no code fence or extra text.
-"""},
-        ],
+    response = _request_completion(
+        question,
+        context,
+        MAX_OUTPUT_TOKENS,
     )
+    choice = response.choices[0]
+    if getattr(choice, "finish_reason", None) in {"length", "max_tokens"}:
+        response = _request_completion(
+            question,
+            context,
+            RETRY_MAX_OUTPUT_TOKENS,
+            retry=True,
+        )
 
     raw_content = response.choices[0].message.content or ""
     return _clean_answer(raw_content)
