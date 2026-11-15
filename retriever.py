@@ -5,7 +5,7 @@ from collections import Counter
 
 import chromadb
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
+from sentence_transformers import CrossEncoder, SentenceTransformer  # type: ignore[import-not-found]
 
 load_dotenv()
 
@@ -18,12 +18,21 @@ DEFAULT_SEARCH_MODE = os.getenv("RAG_SEARCH_MODE", "hybrid").strip().lower()
 HYBRID_SEMANTIC_WEIGHT = float(os.getenv("RAG_HYBRID_SEMANTIC_WEIGHT", "0.65"))
 if not 0 <= HYBRID_SEMANTIC_WEIGHT <= 1:
     raise ValueError("RAG_HYBRID_SEMANTIC_WEIGHT must be between 0 and 1")
+RERANK_ENABLED = os.getenv("RAG_RERANK_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+RERANK_MODEL_NAME = os.getenv(
+    "RAG_RERANK_MODEL",
+    "cross-encoder/ms-marco-MiniLM-L-6-v2",
+)
+RERANK_CANDIDATES = max(int(os.getenv("RAG_RERANK_CANDIDATES", "10")), 1)
 
 # Initialize the database immediately, but load the embedding model only when
 # semantic or hybrid search is requested. Keyword-only queries do not need it.
 client = chromadb.PersistentClient(path=DB_PATH)
 collection = client.get_collection(name=COLLECTION_NAME)
 _model = None
+_reranker = None
 
 STOP_WORDS = {
     "what", "when", "where", "which", "who", "how", "does", "do",
@@ -66,6 +75,13 @@ def _get_model() -> SentenceTransformer:
     if _model is None:
         _model = SentenceTransformer(MODEL_NAME)
     return _model
+
+
+def _get_reranker() -> CrossEncoder:
+    global _reranker
+    if _reranker is None:
+        _reranker = CrossEncoder(RERANK_MODEL_NAME)
+    return _reranker
 
 
 def _canonical_search_mode(
@@ -256,4 +272,29 @@ def retrieve(
         reverse=True,
     )
     min_score = float(os.getenv("RAG_MIN_SCORE", "0.3"))
-    return [chunk for chunk in chunks if chunk["score"] >= min_score][:k]
+    eligible = [chunk for chunk in chunks if chunk["score"] >= min_score]
+
+    if RERANK_ENABLED and eligible:
+        candidates = eligible[:max(k, RERANK_CANDIDATES)]
+        try:
+            pairs = [(question, chunk["text"]) for chunk in candidates]
+            rerank_scores = _get_reranker().predict(
+                pairs,
+                show_progress_bar=False,
+            )
+            for chunk, rerank_score in zip(candidates, rerank_scores):
+                chunk["rerank_score"] = round(float(rerank_score), 6)
+            candidates.sort(
+                key=lambda chunk: (
+                    chunk["rerank_score"],
+                    chunk["score"],
+                ),
+                reverse=True,
+            )
+            return candidates[:k]
+        except Exception as error:
+            # Retrieval remains usable if the optional reranker model cannot
+            # be downloaded or loaded in the current environment.
+            print(f"Reranker unavailable; using hybrid ranking: {error}")
+
+    return eligible[:k]
