@@ -9,12 +9,12 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
 
-from prompt_builder import build_context
-from retriever import refresh_collection, retrieve
-from generator import generate_answer
-from evaluation import run_answer_evaluation, run_evaluation
+from rag.prompt_builder import build_context
+from rag.retriever import refresh_collection, retrieve
+from rag.generator import generate_answer
+from rag.evaluation import run_answer_evaluation, run_evaluation
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
 RAW_DIR = ROOT / "data" / "raw"
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}

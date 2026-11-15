@@ -2,22 +2,27 @@
 from pathlib import Path
 from hashlib import sha256
 import json
-from pathlib import Path
 
 import chromadb
 from sentence_transformers import SentenceTransformer
-from chunker import chunk_text_with_metadata
+from rag.chunker import chunk_text_with_metadata
 from dotenv import load_dotenv
-from loader import load_documents
+from rag.loader import load_documents
 import os
 
-ENV_FILE = Path(__file__).resolve().with_name(".env")
+PROJECT_ROOT = Path(__file__).resolve().parent
+ENV_FILE = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_FILE)
 
 # 1. Configuration
-RAW_DOCS = Path(os.getenv("RAG_DOCS_DIR", "data/raw"))
-PROCESSED_DOCS = Path(os.getenv("RAG_PROCESSED_DIR", "data/processed"))
-STORAGE = Path(os.getenv("RAG_STORAGE_DIR", "storage"))
+def project_path(env_name, default):
+    path = Path(os.getenv(env_name) or default)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+RAW_DOCS = project_path("RAG_DOCS_DIR", "data/raw")
+PROCESSED_DOCS = project_path("RAG_PROCESSED_DIR", "data/processed")
+STORAGE = project_path("RAG_STORAGE_DIR", "storage")
 STORAGE.mkdir(exist_ok=True)
 PROCESSED_DOCS.mkdir(parents=True, exist_ok=True)
 

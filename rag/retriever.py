@@ -8,12 +8,16 @@ import chromadb
 from dotenv import load_dotenv
 from sentence_transformers import CrossEncoder, SentenceTransformer  # type: ignore[import-not-found]
 
-ENV_FILE = Path(__file__).resolve().with_name(".env")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_FILE)
 
 # The embedding configuration is shared with ingestion.
 MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-DB_PATH = os.path.join(os.getenv("RAG_STORAGE_DIR", "storage"), "chroma")
+STORAGE_DIR = Path(os.getenv("RAG_STORAGE_DIR") or "storage")
+if not STORAGE_DIR.is_absolute():
+    STORAGE_DIR = PROJECT_ROOT / STORAGE_DIR
+DB_PATH = str(STORAGE_DIR / "chroma")
 COLLECTION_NAME = os.getenv("RAG_COLLECTION", "rag_documents_v1")
 
 DEFAULT_SEARCH_MODE = (os.getenv("RAG_SEARCH_MODE") or "hybrid").strip().lower()

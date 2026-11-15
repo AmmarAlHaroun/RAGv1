@@ -375,7 +375,7 @@ def run_answer_evaluation(retrieve_fn, build_context_fn, generate_fn, k=5):
 
 
 if __name__ == "__main__":
-    from retriever import retrieve
+    from rag.retriever import retrieve
 
     report = run_evaluation(retrieve)
     print(f"Evidence checks passed: {report['passed']}/{report['total']}")

@@ -6,7 +6,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
-ENV_FILE = Path(__file__).resolve().with_name(".env")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+ENV_FILE = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=ENV_FILE)
 
 MODEL = os.getenv("GEMINI_MODEL") or os.getenv("OPENAI_MODEL")
