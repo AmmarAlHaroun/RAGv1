@@ -62,7 +62,7 @@ async function runEvaluation(full) {
     status.className = 'status error';
   } finally {
     activeButton.disabled = false;
-    activeButton.textContent = full ? 'Full answer check' : 'Fast retrieval check';
+    activeButton.textContent = full ? 'Full answer check' : 'Run retrieval report';
   }
 }
 
@@ -116,21 +116,36 @@ function formatScore(value) {
 
 function renderEvaluation(data) {
   document.querySelector('#evaluation-card').classList.remove('hidden');
-  document.querySelector('#evaluation-title').textContent = 'Fast retrieval check';
+  document.querySelector('#evaluation-title').textContent = 'Retrieval quality report';
   document.querySelector('#evaluation-summary').textContent = `${data.passed}/${data.total} evidence checks passed`;
-  document.querySelector('#evaluation-metrics').innerHTML =
-    `<div class="metric"><strong>${data.passed}/${data.total}</strong><span>Evidence checks passed</span></div>` +
-    `<div class="metric"><strong>${data.needs_review}</strong><span>Needs review</span></div>` +
-    `<div class="metric"><strong>${formatPercentage(data.precision_percentage)}</strong><span>Precision @${data.k}</span></div>` +
-    `<div class="metric"><strong>${formatPercentage(data.recall_percentage)}</strong><span>Recall @${data.k}</span></div>`;
+  document.querySelector('#evaluation-quality').innerHTML =
+    `<strong>${escapeHtml(data.quality_label || 'Retrieval quality')}</strong>` +
+    `<p>${escapeHtml(data.quality_explanation || '')}</p>`;
+  document.querySelector('#evaluation-metrics').innerHTML = [
+    metricCard(formatPercentage(data.pass_percentage), 'Test pass rate', `${data.passed}/${data.total} cases passed`),
+    metricCard(formatPercentage(data.recall_percentage), `Recall @${data.k}`, 'Relevant evidence found'),
+    metricCard(formatPercentage(data.precision_percentage), `Precision @${data.k}`, 'Retrieved evidence that is relevant'),
+    metricCard(formatPercentage(data.f1_percentage), `F1 @${data.k}`, 'Balance of Recall and Precision'),
+    metricCard(formatScore(data.mean_reciprocal_rank), 'MRR', 'How early relevant evidence appears'),
+    metricCard(formatPercentage(data.no_answer_percentage), 'Abstention accuracy', `${data.no_answer_passed}/${data.no_answer_total} unsupported cases`),
+  ].join('');
+  document.querySelector('#evaluation-explanation').textContent =
+    `Why these numbers matter: Recall shows whether important facts are missed; Precision shows whether irrelevant chunks add noise; F1 combines both; MRR shows whether useful evidence appears near the top; the pass rate shows overall test behavior. ` +
+    `The report uses ${data.metric_cases} answerable retrieval cases and ${data.total} total test cases.`;
   document.querySelector('#evaluation-results').innerHTML = data.results.map(item => evaluationRow(item)).join('');
   addReviewHandlers();
+}
+
+function metricCard(value, label, detail) {
+  return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span><small>${escapeHtml(detail)}</small></div>`;
 }
 
 function renderFullEvaluation(data) {
   document.querySelector('#evaluation-card').classList.remove('hidden');
   document.querySelector('#evaluation-title').textContent = 'Full answer check';
   document.querySelector('#evaluation-summary').textContent = `${data.passed}/${data.total} answers passed`;
+  document.querySelector('#evaluation-quality').innerHTML = '';
+  document.querySelector('#evaluation-explanation').textContent = 'This check evaluates generated answers, expected terms, and citation validity. It is slower because it calls the language model.';
   document.querySelector('#evaluation-metrics').innerHTML =
     `<div class="metric"><strong>${data.passed}/${data.total}</strong><span>Answers passed</span></div>` +
     `<div class="metric"><strong>${data.needs_review}</strong><span>Needs review</span></div>`;

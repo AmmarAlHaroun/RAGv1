@@ -152,6 +152,35 @@ def _percentage(value):
     return round(value * 100, 2) if value is not None else None
 
 
+def _f1_score(precision, recall):
+    if precision is None or recall is None or precision + recall == 0:
+        return None
+    return 2 * precision * recall / (precision + recall)
+
+
+def _case_explanation(case, passed, relevant_retrieved, relevant_total, retrieved_count):
+    if not case.get("should_answer", True):
+        if passed:
+            return "No matching evidence was retrieved, so the system correctly abstained."
+        return "Evidence was retrieved for an unsupported question, which can lead to an invented answer."
+
+    if not relevant_total:
+        return "No labeled relevant chunk was found for this test case, so it needs manual review."
+    if relevant_retrieved == 0:
+        return "None of the relevant chunks reached the top results, so the answer would lack evidence."
+    if relevant_retrieved < relevant_total:
+        return (
+            f"The top results contain {relevant_retrieved} of {relevant_total} relevant chunks; "
+            "some supporting facts may be missed."
+        )
+    if retrieved_count > relevant_retrieved:
+        return (
+            f"All {relevant_total} relevant chunks were found, but "
+            f"{retrieved_count - relevant_retrieved} extra chunks were also retrieved."
+        )
+    return "All labeled relevant chunks were retrieved without extra evidence."
+
+
 def run_evaluation(retrieve_fn, k=5):
     """Check whether the top evidence chunks contain the expected answer."""
     results = []
@@ -169,6 +198,9 @@ def run_evaluation(retrieve_fn, k=5):
         ranked_ids = [chunk["id"] for chunk in ranked_chunks]
         precision = precision_at_k(ranked_ids, relevant_ids, k) if relevant_ids else None
         recall = recall_at_k(ranked_ids, relevant_ids, k) if relevant_ids else None
+        top_k_ids = set(ranked_ids[:k])
+        relevant_retrieved = len(top_k_ids & set(relevant_ids))
+        reciprocal = reciprocal_rank(ranked_ids, relevant_ids) if relevant_ids else None
         top_chunk = chunks[0] if chunks else {}
         relevant_chunks = [
             chunk for chunk in chunks
@@ -195,6 +227,17 @@ def run_evaluation(retrieve_fn, k=5):
             "recall_at_k": round(recall, 4) if recall is not None else None,
             "precision_percentage": _percentage(precision),
             "recall_percentage": _percentage(recall),
+            "relevant_retrieved": relevant_retrieved,
+            "relevant_total": len(relevant_ids),
+            "retrieved_count": len(chunks),
+            "first_relevant_rank": round(1 / reciprocal, 2) if reciprocal else None,
+            "explanation": _case_explanation(
+                case,
+                correct,
+                relevant_retrieved,
+                len(relevant_ids),
+                len(chunks),
+            ),
         })
 
     passed = sum(result["passed"] for result in results)
@@ -216,6 +259,51 @@ def run_evaluation(retrieve_fn, k=5):
         sum(recall_values) / len(recall_values)
         if recall_values else None
     )
+    f1 = _f1_score(average_precision, average_recall)
+    reciprocal_values = [
+        result["first_relevant_rank"]
+        for result in results
+        if result["first_relevant_rank"] is not None
+    ]
+    mean_reciprocal_rank = (
+        sum(1 / rank for rank in reciprocal_values) / len(reciprocal_values)
+        if reciprocal_values else None
+    )
+    no_answer_results = [result for result in results if not result["should_answer"]]
+    no_answer_passed = sum(result["passed"] for result in no_answer_results)
+    pass_rate = passed / len(results) if results else None
+    no_answer_rate = (
+        no_answer_passed / len(no_answer_results)
+        if no_answer_results else None
+    )
+
+    if (
+        pass_rate is not None
+        and pass_rate >= 0.9
+        and average_recall is not None
+        and average_recall >= 0.9
+        and average_precision is not None
+        and average_precision >= 0.6
+    ):
+        quality_label = "Strong retrieval"
+    elif average_recall is not None and average_recall >= 0.8:
+        quality_label = "Good coverage; improve focus"
+    else:
+        quality_label = "Needs retrieval improvement"
+
+    quality_reasons = []
+    if average_recall is not None:
+        quality_reasons.append(
+            f"Recall is {_percentage(average_recall)}%, so the retriever finds most labeled evidence."
+        )
+    if average_precision is not None:
+        quality_reasons.append(
+            f"Precision is {_percentage(average_precision)}%, so some retrieved chunks are not directly relevant."
+        )
+    if no_answer_rate is not None:
+        quality_reasons.append(
+            f"Unsupported-question accuracy is {_percentage(no_answer_rate)}%, showing whether the system knows when to abstain."
+        )
 
     return {
         "total": len(results),
@@ -226,6 +314,16 @@ def run_evaluation(retrieve_fn, k=5):
         "recall_at_k": round(average_recall, 4) if average_recall is not None else None,
         "precision_percentage": _percentage(average_precision),
         "recall_percentage": _percentage(average_recall),
+        "f1_at_k": round(f1, 4) if f1 is not None else None,
+        "f1_percentage": _percentage(f1),
+        "mean_reciprocal_rank": round(mean_reciprocal_rank, 4) if mean_reciprocal_rank is not None else None,
+        "mrr_percentage": _percentage(mean_reciprocal_rank),
+        "pass_percentage": _percentage(pass_rate),
+        "no_answer_passed": no_answer_passed,
+        "no_answer_total": len(no_answer_results),
+        "no_answer_percentage": _percentage(no_answer_rate),
+        "quality_label": quality_label,
+        "quality_explanation": " ".join(quality_reasons),
         "metric_cases": len(precision_values),
         "results": results,
     }

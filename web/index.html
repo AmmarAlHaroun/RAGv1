@@ -96,9 +96,9 @@
           <section class="card evaluation-intro" aria-labelledby="evaluation-intro-title">
             <span class="section-kicker">QUALITY CHECKS</span>
             <h2 id="evaluation-intro-title">Test the retrieval</h2>
-            <p>Run a quick evidence check or a slower end-to-end answer check against the built-in test questions.</p>
+            <p>Run a retrieval report with percentages, counts, and explanations showing why the RAG system is working well or where it needs improvement.</p>
             <div class="evaluation-actions">
-              <button id="evaluate-button" class="secondary-button" type="button">Fast retrieval check</button>
+              <button id="evaluate-button" class="secondary-button" type="button">Run retrieval report</button>
               <button id="full-evaluate-button" class="text-button" type="button">Full answer check <span aria-hidden="true">&#8594;</span></button>
             </div>
           </section>
@@ -119,15 +119,29 @@
                 <code>relevant chunks retrieved &divide; chunks retrieved</code>
                 <p class="metric-example"><strong>High precision:</strong> less distracting evidence reaches the answer.</p>
               </article>
+              <article class="metric-explanation">
+                <div class="metric-label"><span class="metric-symbol" aria-hidden="true">F</span><h3>F1 score</h3></div>
+                <p>A single balance between Recall and Precision.</p>
+                <code>2 &times; precision &times; recall &divide; (precision + recall)</code>
+                <p class="metric-example"><strong>Why:</strong> a high score means the retriever finds evidence without adding too much noise.</p>
+              </article>
+              <article class="metric-explanation">
+                <div class="metric-label"><span class="metric-symbol" aria-hidden="true">T</span><h3>Test pass rate</h3></div>
+                <p>The percentage of built-in questions whose expected evidence was found correctly.</p>
+                <code>passed test cases &divide; all test cases</code>
+                <p class="metric-example"><strong>Why:</strong> it gives an easy overall health signal for the current document set.</p>
+              </article>
             </div>
-            <p class="metrics-note"><strong>In practice:</strong> Recall helps prevent missing context; Precision helps keep answers focused. The fast retrieval check reports Precision@5 and Recall@5 from the built-in labeled questions.</p>
+            <p class="metrics-note"><strong>In practice:</strong> Recall helps prevent missing context; Precision helps keep answers focused; F1 shows their balance. The report also explains each test case so you can see why a percentage changed.</p>
           </section>
         </aside>
       </div>
 
       <section id="evaluation-card" class="card hidden results-section" aria-labelledby="evaluation-title">
         <div class="section-heading"><div><span class="section-kicker">QUALITY REPORT</span><h2 id="evaluation-title">Retrieval evaluation</h2></div><span id="evaluation-summary"></span></div>
+        <div id="evaluation-quality" class="quality-banner"></div>
         <div id="evaluation-metrics" class="metrics"></div>
+        <p id="evaluation-explanation" class="evaluation-explanation"></p>
         <div id="evaluation-results" class="evaluation-results"></div>
       </section>
 
