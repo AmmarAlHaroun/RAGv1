@@ -124,7 +124,9 @@ function renderEvaluation(data) {
   document.querySelector('#evaluation-metrics').innerHTML = [
     metricCard(formatPercentage(data.pass_percentage), 'Test pass rate', `${data.passed}/${data.total} cases passed`),
     metricCard(formatPercentage(data.recall_percentage), `Recall @${data.k}`, 'Relevant evidence found'),
-    metricCard(formatPercentage(data.precision_percentage), `Precision @${data.k}`, 'Retrieved evidence that is relevant'),
+    metricCard(formatPercentage(data.precision_percentage), `Precision @${data.k}`, 'Fixed denominator baseline'),
+    metricCard(formatPercentage(data.capped_precision_percentage), 'Capped precision', 'Normalized by relevant chunks'),
+    metricCard(formatPercentage(data.context_precision_percentage), 'Context precision', 'Chunks sent to the generator'),
     metricCard(formatPercentage(data.f1_percentage), `F1 @${data.k}`, 'Balance of Recall and Precision'),
     metricCard(formatScore(data.mean_reciprocal_rank), 'MRR', 'How early relevant evidence appears'),
     metricCard(formatPercentage(data.no_answer_percentage), 'Abstention accuracy', `${data.no_answer_passed}/${data.no_answer_total} unsupported cases`),
@@ -160,7 +162,7 @@ function evaluationRow(item) {
   const details = item.missing_terms.length ? item.missing_terms : item.found_terms;
   const metrics = item.precision_percentage == null
     ? 'Not applicable for this question'
-    : `Precision ${formatPercentage(item.precision_percentage)} · Recall ${formatPercentage(item.recall_percentage)}`;
+    : `Precision ${formatPercentage(item.precision_percentage)} · Capped ${formatPercentage(item.capped_precision_percentage)} · Context ${formatPercentage(item.context_precision_percentage)} · Recall ${formatPercentage(item.recall_percentage)}`;
   return `<details class="evaluation-row"><summary><span>${escapeHtml(item.question)}</span><span class="${item.passed ? 'pass' : 'fail'}">${item.passed ? 'CORRECT' : 'CHECK'}</span></summary><div class="meta"><strong>Expected answer:</strong> ${escapeHtml(item.expected_answer)}</div><div class="meta"><strong>Retrieved:</strong> ${escapeHtml(item.top_source || 'none')} - chunk ${item.top_chunk ?? '-'}</div><div class="meta"><strong>Retrieval metrics:</strong> ${metrics}</div><div class="evaluation-evidence">${escapeHtml(item.retrieved_text || 'No chunk was retrieved.')}</div><div class="meta ${item.missing_terms.length ? 'fail' : 'pass'}"><strong>${item.missing_terms.length ? 'Missing:' : 'Found:'}</strong> ${escapeHtml(details.join(', ') || 'none')}</div><div class="review-actions"><span>Manual review:</span><button data-review="correct" data-question="${key}" class="review-button ${saved === 'correct' ? 'selected' : ''}">Correct</button><button data-review="needs-review" data-question="${key}" class="review-button ${saved === 'needs-review' ? 'selected' : ''}">Needs review</button></div></details>`;
 }
 

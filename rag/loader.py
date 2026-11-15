@@ -3,6 +3,7 @@ from hashlib import sha256
 import logging
 from pathlib import Path
 from typing import Iterable
+import re
 
 from pypdf import PdfReader
 
@@ -17,6 +18,7 @@ class Document:
 
 
 SUPPORTED_SUFFIXES = {".txt", ".md", ".pdf"}
+PDF_CLEANUP_VERSION = "pdf-cleanup-v1"
 
 
 def load_documents(paths: str | Path | Iterable[str | Path]) -> list[Document]:
@@ -93,4 +95,62 @@ def _read_text(path: Path) -> str:
 
 def _read_pdf(path: Path) -> str:
     reader = PdfReader(path)
-    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+    raw_pages = [page.extract_text() or "" for page in reader.pages]
+    cleaned_pages = []
+    page_lines = []
+    repeated_lines = {}
+
+    for page_number, raw_page in enumerate(raw_pages, start=1):
+        non_printable = sum(
+            not character.isprintable() and character not in "\r\n\t"
+            for character in raw_page
+        )
+        non_whitespace = sum(not character.isspace() for character in raw_page)
+        if len(raw_page.strip()) < 40 or (
+            non_whitespace and non_printable / non_whitespace > 0.05
+        ):
+            logger.warning(
+                "PDF extraction may be broken for %s page %s: %s characters, %.1f%% non-printable",
+                path,
+                page_number,
+                len(raw_page.strip()),
+                100 * non_printable / max(non_whitespace, 1),
+            )
+
+        lines = []
+        for raw_line in raw_page.splitlines():
+            line = re.sub(
+                r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]",
+                " ",
+                raw_line,
+            )
+            line = re.sub(r"\s+", " ", line).strip()
+            if not line:
+                lines.append("")
+                continue
+            lines.append(line)
+            normalized = line.casefold()
+            repeated_lines[normalized] = repeated_lines.get(normalized, 0) + 1
+        page_lines.append(lines)
+
+    for lines in page_lines:
+        cleaned_lines = []
+        for line in lines:
+            normalized = line.casefold()
+            is_page_marker = bool(re.fullmatch(r"page\s+\d+", normalized))
+            is_repeated_header_or_footer = (
+                bool(line)
+                and len(line) <= 120
+                and repeated_lines.get(normalized, 0) >= 2
+            )
+            if is_page_marker or is_repeated_header_or_footer:
+                continue
+            cleaned_lines.append(line)
+
+        while cleaned_lines and not cleaned_lines[0]:
+            cleaned_lines.pop(0)
+        while cleaned_lines and not cleaned_lines[-1]:
+            cleaned_lines.pop()
+        cleaned_pages.append("\n".join(cleaned_lines))
+
+    return "\n\n".join(page for page in cleaned_pages if page).strip()

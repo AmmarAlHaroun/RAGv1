@@ -7,7 +7,7 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from rag.chunker import chunk_text_with_metadata
 from dotenv import load_dotenv
-from rag.loader import load_documents
+from rag.loader import PDF_CLEANUP_VERSION, load_documents
 import os
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -37,7 +37,8 @@ CONFIG = {
     "chunk_size": CHUNK_SIZE,
     "overlap": OVERLAP,
     "collection": os.getenv("RAG_COLLECTION", "rag_documents_v1"),
-    "processed_dir": str(PROCESSED_DOCS)
+    "processed_dir": str(PROCESSED_DOCS),
+    "text_cleanup": PDF_CLEANUP_VERSION,
 }
 
 # 2. Open the persistent database
@@ -114,7 +115,12 @@ for path, source, is_new in document_files():
         continue
     text = loaded[0].text
 
-    chunk_records = chunk_text_with_metadata(text, CHUNK_SIZE, OVERLAP)
+    chunk_records = chunk_text_with_metadata(
+        text,
+        CHUNK_SIZE,
+        OVERLAP,
+        plain_pdf=path.suffix.lower() == ".pdf",
+    )
     chunks = [record["text"] for record in chunk_records]
 
     ids = [

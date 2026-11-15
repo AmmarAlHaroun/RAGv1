@@ -7,6 +7,7 @@ from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 from sentence_transformers import CrossEncoder, SentenceTransformer  # type: ignore[import-not-found]
+from rag.config import RAG_TOP_K
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
@@ -35,6 +36,16 @@ RERANK_CANDIDATES = max(int(os.getenv("RAG_RERANK_CANDIDATES", "10")), 1)
 COMPREHENSIVE_MIN_SCORE = float(
     os.getenv("RAG_COMPREHENSIVE_MIN_SCORE", "0.2")
 )
+MAX_CHUNKS_PER_SOURCE = max(int(os.getenv("RAG_MAX_CHUNKS_PER_SOURCE", "3")), 0)
+RERANK_MIN_SCORE = (
+    float(os.getenv("RAG_RERANK_MIN_SCORE"))
+    if os.getenv("RAG_RERANK_MIN_SCORE") not in {None, ""}
+    else None
+)
+RERANK_RELATIVE_CUTOFF = max(
+    float(os.getenv("RAG_RERANK_RELATIVE_CUTOFF", "2.0")),
+    0.0,
+)
 
 # Initialize the database immediately, but load the embedding model only when
 # semantic or hybrid search is requested. Keyword-only queries do not need it.
@@ -56,6 +67,16 @@ STOP_WORDS = {
     "and", "or", "can", "i", "my", "with", "about", "before", "after",
     "explain", "describe", "list", "tell", "give", "show",
 }
+
+COMPREHENSIVE_TERMS = (
+    "list", "all", "each", "every", "divided", "breakdown",
+    "requirements", "modules", "percentages", "percentage",
+    "compare", "comparison", "difference", "different", "differ",
+    "between", "defend", "defense", "goods", "religions", "types",
+    "advantages", "limitations", "maintenance", "components", "processes",
+    "efficiency", "efficiencies", "tools", "invention", "neurons",
+    "located", "cell",
+)
 
 # Keep punctuation inside identifiers and technical terms, then also index
 # their pieces. This lets "AI-101", "AI 101", and "python 3.11" match each
@@ -234,9 +255,95 @@ def _semantic_score(distance: float | None) -> float:
     return max(0.0, min(1.0, 1.0 - float(distance) / 2.0))
 
 
+def _normalized_text(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def _text_similarity(left: str, right: str) -> float:
+    left_tokens = set(_normalized_text(left).split())
+    right_tokens = set(_normalized_text(right).split())
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def _ranges_overlap(left: dict, right: dict) -> float:
+    if left.get("source") != right.get("source"):
+        return 0.0
+    if left.get("section_title", "") != right.get("section_title", ""):
+        return 0.0
+    left_start, left_end = left.get("word_start"), left.get("word_end")
+    right_start, right_end = right.get("word_start"), right.get("word_end")
+    if not all(isinstance(value, int) for value in (left_start, left_end, right_start, right_end)):
+        return 0.0
+    overlap = max(0, min(left_end, right_end) - max(left_start, right_start))
+    shorter = min(left_end - left_start, right_end - right_start)
+    return overlap / shorter if shorter > 0 else 0.0
+
+
+def _is_duplicate_chunk(candidate: dict, selected: list[dict]) -> bool:
+    candidate_key = (
+        candidate.get("source"),
+        candidate.get("chunk_index"),
+        candidate.get("word_start"),
+        candidate.get("word_end"),
+    )
+    candidate_text = _normalized_text(candidate.get("text", ""))
+    for previous in selected:
+        previous_key = (
+            previous.get("source"),
+            previous.get("chunk_index"),
+            previous.get("word_start"),
+            previous.get("word_end"),
+        )
+        if candidate_key == previous_key:
+            return True
+        previous_text = _normalized_text(previous.get("text", ""))
+        if candidate_text and candidate_text == previous_text:
+            return True
+        if (
+            _ranges_overlap(candidate, previous) >= 0.5
+            and _text_similarity(candidate.get("text", ""), previous.get("text", "")) >= 0.35
+        ):
+            return True
+    return False
+
+
+def _is_comprehensive(question: str) -> bool:
+    question = question.lower()
+    if re.search(r"\b(and|versus|vs)\b", question):
+        return True
+    for term in COMPREHENSIVE_TERMS:
+        if term == "each" and re.search(r"\beach\s+year\b", question):
+            continue
+        if re.search(rf"\b{re.escape(term)}\b", question):
+            return True
+    return False
+
+
+def _postprocess_results(chunks: list[dict], k: int, comprehensive: bool) -> list[dict]:
+    unique: list[dict] = []
+    for chunk in chunks:
+        if not _is_duplicate_chunk(chunk, unique):
+            unique.append(chunk)
+
+    if not comprehensive and MAX_CHUNKS_PER_SOURCE and k <= RAG_TOP_K:
+        limited: list[dict] = []
+        source_counts: Counter[str] = Counter()
+        for chunk in unique:
+            source = chunk.get("source", "")
+            if source_counts[source] >= MAX_CHUNKS_PER_SOURCE:
+                continue
+            source_counts[source] += 1
+            limited.append(chunk)
+        unique = limited
+
+    return unique[:k]
+
+
 def retrieve(
     question: str,
-    k: int = 3,
+    k: int | None = None,
     source: str | None = None,
     method: str | None = None,
     mode: str | None = None,
@@ -251,6 +358,8 @@ def retrieve(
     question = question or ""
     if not question.strip():
         return []
+    if k is None:
+        k = RAG_TOP_K
     if k < 1:
         raise ValueError("k must be at least 1")
     if collection.count() == 0:
@@ -295,11 +404,7 @@ def retrieve(
         reverse=True,
     )
     min_score = float(os.getenv("RAG_MIN_SCORE", "0.3"))
-    comprehensive_terms = (
-        "list", "all", "each", "every", "divided", "breakdown",
-        "requirements", "modules", "percentages", "percentage",
-    )
-    is_comprehensive = any(term in question.lower() for term in comprehensive_terms)
+    is_comprehensive = _is_comprehensive(question)
     effective_min_score = (
         min(min_score, COMPREHENSIVE_MIN_SCORE)
         if is_comprehensive
@@ -324,10 +429,20 @@ def retrieve(
                 ),
                 reverse=True,
             )
-            return candidates[:k]
+            if not is_comprehensive and k <= RAG_TOP_K and candidates:
+                top_rerank_score = candidates[0]["rerank_score"]
+                candidates = [
+                    chunk for chunk in candidates
+                    if (
+                        RERANK_MIN_SCORE is None
+                        or chunk["rerank_score"] >= RERANK_MIN_SCORE
+                    )
+                    and chunk["rerank_score"] >= top_rerank_score - RERANK_RELATIVE_CUTOFF
+                ]
+            return _postprocess_results(candidates, k, is_comprehensive)
         except Exception as error:
             # Retrieval remains usable if the optional reranker model cannot
             # be downloaded or loaded in the current environment.
             print(f"Reranker unavailable; using hybrid ranking: {error}")
 
-    return eligible[:k]
+    return _postprocess_results(eligible, k, is_comprehensive)

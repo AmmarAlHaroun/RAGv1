@@ -12,7 +12,8 @@ from urllib.parse import urlparse
 from rag.prompt_builder import build_context
 from rag.retriever import refresh_collection, retrieve
 from rag.generator import generate_answer
-from rag.evaluation import run_answer_evaluation, run_evaluation
+from rag.evaluation import record_evaluation_run, run_answer_evaluation, run_evaluation
+from rag.config import RAG_TOP_K
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
@@ -35,6 +36,7 @@ class Handler(SimpleHTTPRequestHandler):
                 report = run_answer_evaluation(
                     retrieve, build_context, generate_answer
                 )
+                record_evaluation_run(report, run_type="full")
                 self._json(report)
             except Exception as error:
                 self._json({"error": str(error)}, status=500)
@@ -51,9 +53,8 @@ class Handler(SimpleHTTPRequestHandler):
             # The application chooses the best retrieval strategy internally.
             # Hybrid search combines semantic similarity and BM25 without
             # asking users to understand or select a retrieval mode.
-            # Use a wider evidence window for answer generation so list and
-            # multi-part questions do not lose relevant items.
-            chunks = retrieve(question, k=8, method="hybrid")
+            # Keep the application context window aligned with evaluation.
+            chunks = retrieve(question, k=RAG_TOP_K, method="hybrid")
             if not chunks:
                 answer = "I don't have enough information to answer this question."
                 sources = []
@@ -136,7 +137,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if urlparse(self.path).path == "/api/evaluate":
             try:
-                self._json(run_evaluation(retrieve))
+                report = run_evaluation(retrieve)
+                record_evaluation_run(report)
+                self._json(report)
             except Exception as error:
                 self._json({"error": str(error)}, status=500)
             return

@@ -29,6 +29,13 @@ if not MODEL:
 
 client = None
 UNSUPPORTED_ANSWER = "- I don't have enough information to answer this question."
+LAST_GENERATION_METADATA = {
+    "finish_reason": None,
+    "initial_finish_reason": None,
+    "truncated": False,
+    "retry_used": False,
+    "attempts": 0,
+}
 
 
 INSTRUCTIONS = """
@@ -139,7 +146,7 @@ Return only the final answer text, with no code fence or extra text.
 
 
 def generate_answer(question, context):
-    global client
+    global client, LAST_GENERATION_METADATA
     question = question or ""
     context = context or ""
     if not API_KEY or API_KEY == "your_gemini_api_key_here":
@@ -160,7 +167,10 @@ def generate_answer(question, context):
         MAX_OUTPUT_TOKENS,
     )
     choice = response.choices[0]
-    if getattr(choice, "finish_reason", None) in {"length", "max_tokens"}:
+    initial_finish_reason = getattr(choice, "finish_reason", None)
+    retry_used = False
+    if initial_finish_reason in {"length", "max_tokens"}:
+        retry_used = True
         response = _request_completion(
             question,
             context,
@@ -168,5 +178,19 @@ def generate_answer(question, context):
             retry=True,
         )
 
-    raw_content = response.choices[0].message.content or ""
+    final_choice = response.choices[0]
+    final_finish_reason = getattr(final_choice, "finish_reason", None)
+    LAST_GENERATION_METADATA = {
+        "finish_reason": final_finish_reason,
+        "initial_finish_reason": initial_finish_reason,
+        "truncated": final_finish_reason in {"length", "max_tokens"},
+        "retry_used": retry_used,
+        "attempts": 2 if retry_used else 1,
+    }
+    raw_content = final_choice.message.content or ""
     return _clean_answer(raw_content)
+
+
+def get_last_generation_metadata() -> dict:
+    """Expose finish/truncation information without changing answer callers."""
+    return dict(LAST_GENERATION_METADATA)

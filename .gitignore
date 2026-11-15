@@ -11,5 +11,7 @@ env/
 .ruff_cache/
 storage/chroma/
 storage/manifest.json
+storage/answer_evaluation_cache.json
+storage/evaluation_history.jsonl
 storage/*.tmp
 .DS_Store
