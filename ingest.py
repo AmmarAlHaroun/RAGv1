@@ -2,15 +2,17 @@
 from pathlib import Path
 from hashlib import sha256
 import json
+from pathlib import Path
 
 import chromadb
 from sentence_transformers import SentenceTransformer
-from chunker import chunk_text
+from chunker import chunk_text_with_metadata
 from dotenv import load_dotenv
 from loader import load_documents
 import os
 
-load_dotenv()
+ENV_FILE = Path(__file__).resolve().with_name(".env")
+load_dotenv(dotenv_path=ENV_FILE)
 
 # 1. Configuration
 RAW_DOCS = Path(os.getenv("RAG_DOCS_DIR", "data/raw"))
@@ -22,8 +24,8 @@ PROCESSED_DOCS.mkdir(parents=True, exist_ok=True)
 MANIFEST_PATH = STORAGE / "manifest.json"
 
 MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-CHUNK_SIZE = 100
-OVERLAP = 20
+CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "180"))
+OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "30"))
 
 CONFIG = {
     "model": MODEL_NAME,
@@ -52,6 +54,9 @@ else:
 
 if manifest["config"] != CONFIG:
     print("Configuration changed; rebuilding the generic document index.")
+    existing_ids = collection.get().get("ids", [])
+    if existing_ids:
+        collection.delete(ids=existing_ids)
     manifest = {"config": CONFIG, "files": {}}
 
 model = None
@@ -104,7 +109,8 @@ for path, source, is_new in document_files():
         continue
     text = loaded[0].text
 
-    chunks = chunk_text(text, CHUNK_SIZE, OVERLAP)
+    chunk_records = chunk_text_with_metadata(text, CHUNK_SIZE, OVERLAP)
+    chunks = [record["text"] for record in chunk_records]
 
     ids = [
         sha256(f"{source}:{i}".encode()).hexdigest()
@@ -126,8 +132,16 @@ for path, source, is_new in document_files():
             documents=chunks,
             embeddings=vectors,
             metadatas=[
-                {"source": source, "chunk_index": i}
-                for i in range(len(chunks))
+                {
+                    "source": source,
+                    "file_name": path.name,
+                    "file_type": path.suffix.lower().lstrip("."),
+                    "chunk_index": i,
+                    "section_title": record["section_title"],
+                    "word_start": record["word_start"],
+                    "word_end": record["word_end"],
+                }
+                for i, record in enumerate(chunk_records)
             ]
         )
 

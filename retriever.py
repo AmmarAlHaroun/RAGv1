@@ -2,23 +2,25 @@ import math
 import os
 import re
 from collections import Counter
+from pathlib import Path
 
 import chromadb
 from dotenv import load_dotenv
 from sentence_transformers import CrossEncoder, SentenceTransformer  # type: ignore[import-not-found]
 
-load_dotenv()
+ENV_FILE = Path(__file__).resolve().with_name(".env")
+load_dotenv(dotenv_path=ENV_FILE)
 
 # The embedding configuration is shared with ingestion.
 MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 DB_PATH = os.path.join(os.getenv("RAG_STORAGE_DIR", "storage"), "chroma")
 COLLECTION_NAME = os.getenv("RAG_COLLECTION", "rag_documents_v1")
 
-DEFAULT_SEARCH_MODE = os.getenv("RAG_SEARCH_MODE", "hybrid").strip().lower()
+DEFAULT_SEARCH_MODE = (os.getenv("RAG_SEARCH_MODE") or "hybrid").strip().lower()
 HYBRID_SEMANTIC_WEIGHT = float(os.getenv("RAG_HYBRID_SEMANTIC_WEIGHT", "0.65"))
 if not 0 <= HYBRID_SEMANTIC_WEIGHT <= 1:
     raise ValueError("RAG_HYBRID_SEMANTIC_WEIGHT must be between 0 and 1")
-RERANK_ENABLED = os.getenv("RAG_RERANK_ENABLED", "true").strip().lower() in {
+RERANK_ENABLED = (os.getenv("RAG_RERANK_ENABLED") or "true").strip().lower() in {
     "1", "true", "yes", "on"
 }
 RERANK_MODEL_NAME = os.getenv(
@@ -26,6 +28,9 @@ RERANK_MODEL_NAME = os.getenv(
     "cross-encoder/ms-marco-MiniLM-L-6-v2",
 )
 RERANK_CANDIDATES = max(int(os.getenv("RAG_RERANK_CANDIDATES", "10")), 1)
+COMPREHENSIVE_MIN_SCORE = float(
+    os.getenv("RAG_COMPREHENSIVE_MIN_SCORE", "0.2")
+)
 
 # Initialize the database immediately, but load the embedding model only when
 # semantic or hybrid search is requested. Keyword-only queries do not need it.
@@ -33,6 +38,13 @@ client = chromadb.PersistentClient(path=DB_PATH)
 collection = client.get_collection(name=COLLECTION_NAME)
 _model = None
 _reranker = None
+
+
+def refresh_collection() -> None:
+    """Reload the Chroma collection after another process ingests documents."""
+    global client, collection
+    client = chromadb.PersistentClient(path=DB_PATH)
+    collection = client.get_collection(name=COLLECTION_NAME)
 
 STOP_WORDS = {
     "what", "when", "where", "which", "who", "how", "does", "do",
@@ -49,6 +61,7 @@ TOKEN_SEPARATOR_PATTERN = re.compile(r"[._:/-]+")
 
 
 def _tokenize(value: str) -> list[str]:
+    value = value or ""
     tokens: list[str] = []
     for raw_token in TOKEN_PATTERN.findall(value.lower()):
         tokens.append(raw_token)
@@ -90,7 +103,7 @@ def _canonical_search_mode(
     search_type: str | None,
 ) -> str:
     requested = method or mode or search_type or DEFAULT_SEARCH_MODE
-    normalized = requested.strip().lower()
+    normalized = (requested or "").strip().lower()
     aliases = {
         "bm25": "keyword",
         "keyword": "keyword",
@@ -124,8 +137,13 @@ def _records_from_chroma(result: dict, nested: bool = False) -> list[dict]:
             "id": chunk_id,
             "text": documents[index] if index < len(documents) else "",
             "source": (metadata or {}).get("source", "unknown"),
+            "file_name": (metadata or {}).get("file_name", ""),
+            "file_type": (metadata or {}).get("file_type", ""),
+            "section_title": (metadata or {}).get("section_title", ""),
             "distance": distances[index] if index < len(distances) else None,
             "chunk_index": (metadata or {}).get("chunk_index", index),
+            "word_start": (metadata or {}).get("word_start"),
+            "word_end": (metadata or {}).get("word_end"),
         })
     return records
 
@@ -226,6 +244,7 @@ def retrieve(
     normalized BM25 scores. ``method``, ``mode``, and ``search_type`` are
     accepted as aliases so callers can use the name that fits their API.
     """
+    question = question or ""
     if not question.strip():
         return []
     if k < 1:
@@ -272,7 +291,17 @@ def retrieve(
         reverse=True,
     )
     min_score = float(os.getenv("RAG_MIN_SCORE", "0.3"))
-    eligible = [chunk for chunk in chunks if chunk["score"] >= min_score]
+    comprehensive_terms = (
+        "list", "all", "each", "every", "divided", "breakdown",
+        "requirements", "modules", "percentages", "percentage",
+    )
+    is_comprehensive = any(term in question.lower() for term in comprehensive_terms)
+    effective_min_score = (
+        min(min_score, COMPREHENSIVE_MIN_SCORE)
+        if is_comprehensive
+        else min_score
+    )
+    eligible = [chunk for chunk in chunks if chunk["score"] >= effective_min_score]
 
     if RERANK_ENABLED and eligible:
         candidates = eligible[:max(k, RERANK_CANDIDATES)]

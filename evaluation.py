@@ -249,6 +249,7 @@ def run_answer_evaluation(retrieve_fn, build_context_fn, generate_fn, k=5):
         valid_citations = bool(citations) and all(
             1 <= int(citation) <= len(chunks) for citation in citations
         )
+        answer = answer or ""
         answer_terms_found = [
             term for term in expected_terms if term.lower() in answer.lower()
         ]

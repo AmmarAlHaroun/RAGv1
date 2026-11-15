@@ -10,7 +10,7 @@ from threading import Lock
 from urllib.parse import urlparse
 
 from prompt_builder import build_context
-from retriever import retrieve
+from retriever import refresh_collection, retrieve
 from generator import generate_answer
 from evaluation import run_answer_evaluation, run_evaluation
 
@@ -51,12 +51,14 @@ class Handler(SimpleHTTPRequestHandler):
             # The application chooses the best retrieval strategy internally.
             # Hybrid search combines semantic similarity and BM25 without
             # asking users to understand or select a retrieval mode.
-            chunks = retrieve(question, k=5, method="hybrid")
+            # Use a wider evidence window for answer generation so list and
+            # multi-part questions do not lose relevant items.
+            chunks = retrieve(question, k=8, method="hybrid")
             if not chunks:
                 answer = "I don't have enough information to answer this question."
                 sources = []
             else:
-                context, sources = build_context(chunks)
+                context, sources = build_context(chunks, question=question)
                 answer = generate_answer(question, context)
             self._json({
                 "answer": answer,
@@ -122,6 +124,10 @@ class Handler(SimpleHTTPRequestHandler):
             output = (process.stdout + process.stderr)[-12000:]
             if process.returncode != 0:
                 raise RuntimeError(output or "Document ingestion failed")
+
+            # Ingestion runs in a child process. Reload the collection so the
+            # long-running web server sees newly added or replaced documents.
+            refresh_collection()
 
             self._json({"files": uploaded, "message": "Documents indexed successfully", "log": output})
         except Exception as error:
