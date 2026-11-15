@@ -1,0 +1,41 @@
+# University Student Policies
+
+- Policy scope: These policies apply to students enrolled in undergraduate courses.
+- Policy status: This is fictional practice data for testing a retrieval system.
+- Dataset version: 4.
+- Attendance rule: Students should attend all scheduled lectures and laboratory sessions.
+- Attendance exception: Students who miss a class should notify the instructor within 48 hours.
+- Attendance responsibility: Students must obtain and review material missed during an absence.
+
+- Late submission rule: An assignment submitted late loses 10 percent of its mark per calendar day.
+- Late submission limit: Late work is accepted for a maximum of 3 calendar days.
+- Late submission exception: An approved extension removes the late penalty.
+- Extension request: Students should request an extension before the assignment deadline.
+
+- Academic integrity rule: Students must submit their own work unless collaboration is explicitly allowed.
+- Plagiarism rule: Copying words, code, data, or ideas without credit is prohibited.
+- Cheating rule: Unauthorized help during an examination or assignment is prohibited.
+- Academic integrity consequence: Suspected violations may be referred to the academic integrity committee.
+
+- Artificial intelligence rule: AI tools may be used only when the instructor or assignment allows them.
+- Artificial intelligence responsibility: Students are responsible for checking every AI-generated claim.
+- Artificial intelligence disclosure: Students must acknowledge AI assistance when the assignment requires disclosure.
+- Artificial intelligence privacy: Students must not upload confidential university or personal information to public AI tools.
+
+- Grade review rule: A student may request a grade review within 7 calendar days of receiving the grade.
+- Grade review requirement: The request must identify the rubric criterion and explain the reason for the review.
+- Grade appeal rule: Formal appeals must follow the university appeal procedure after the grade review.
+
+- Communication rule: Students must use their official university email for academic communication.
+- Communication requirement: Messages should include the student name, course code, and a clear request.
+- Response expectation: Staff normally respond during published working hours.
+
+- Accessibility rule: Students who need accommodations should contact the university accessibility office.
+- Accessibility privacy: Accommodation information must be shared only with staff who need it to support the student.
+
+- Data protection rule: Student records must not be shared with unauthorized people.
+- Data protection purpose: Personal information may be used only for legitimate academic or administrative purposes.
+
+- Student conduct rule: Students must treat classmates, instructors, and staff respectfully.
+- Student conduct prohibition: Harassment, threats, discrimination, and disruptive behavior are prohibited.
+- Safety rule: Students must follow laboratory safety instructions and report hazards promptly.

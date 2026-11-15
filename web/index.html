@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <title>RAG Workbench | Document tester</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="RAG Workbench home">
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span>RAG Workbench</span>
+      </a>
+      <span class="workspace-pill"><span class="status-dot" aria-hidden="true"></span> Local workspace</span>
+    </header>
+
+    <main id="content" tabindex="-1">
+      <section class="hero" aria-labelledby="page-title">
+        <p class="eyebrow">DOCUMENT INTELLIGENCE</p>
+        <h1 id="page-title">Ask your documents<br><em>with confidence.</em></h1>
+        <p class="subtitle">Upload a document, ask a question, and inspect the exact evidence behind every answer.</p>
+      </section>
+
+      <div class="workspace-grid">
+        <div class="primary-column">
+          <section class="card ask-card" aria-labelledby="ask-title">
+            <div class="card-heading">
+              <div>
+                <span class="section-kicker">01 / QUERY</span>
+                <h2 id="ask-title">Ask a question</h2>
+              </div>
+              <span class="icon-badge" aria-hidden="true">?</span>
+            </div>
+            <form id="ask-form" action="/api/ask" method="post" aria-labelledby="ask-title">
+              <label for="question">Your question</label>
+              <p id="question-help" class="field-help">Ask about anything in your indexed documents. Retrieval automatically combines meaning and exact-term matching.</p>
+              <textarea id="question" name="question" rows="4" aria-describedby="question-help" placeholder="e.g. What are the prerequisites for AI-101?" required></textarea>
+              <div class="form-row">
+                <span id="status" class="status" role="status" aria-live="polite">Ready to search</span>
+                <button id="ask-button" class="primary-button" type="submit">Ask documents <span aria-hidden="true">&#8594;</span></button>
+              </div>
+            </form>
+          </section>
+
+          <section id="result" class="card result-card hidden" aria-labelledby="answer-title">
+            <div class="section-heading"><div><span class="section-kicker">RESULT</span><h2 id="answer-title">Answer</h2></div><span id="answer-time"></span></div>
+            <div id="answer" class="answer"></div>
+            <h3>References</h3>
+            <div id="references" class="references"></div>
+          </section>
+
+          <section id="evidence-card" class="card hidden results-section" aria-labelledby="evidence-title">
+            <div class="section-heading"><div><span class="section-kicker">TRACE</span><h2 id="evidence-title">Retrieved evidence</h2></div><span id="evidence-count"></span></div>
+            <div id="evidence" class="evidence-list"></div>
+          </section>
+
+          <section class="card upload-card" aria-labelledby="upload-title">
+            <div class="upload-heading">
+              <div>
+                <span class="section-kicker">02 / INGEST</span>
+                <h2 id="upload-title">Add documents</h2>
+              </div>
+              <span class="icon-badge icon-badge-muted" aria-hidden="true">+</span>
+            </div>
+            <form id="upload-form" class="upload-form" action="/api/upload" method="post" enctype="multipart/form-data" aria-labelledby="upload-title">
+              <label for="documents">Choose files</label>
+              <p id="upload-help" class="field-help">TXT, Markdown, or PDF. Multiple files are supported.</p>
+              <div class="upload-row">
+                <input id="documents" name="documents" type="file" accept=".txt,.md,.pdf" aria-describedby="upload-help selected-files" multiple required>
+                <button id="upload-button" class="secondary-button" type="submit">Upload and index</button>
+              </div>
+              <p id="selected-files" class="selected-files" role="status" aria-live="polite">No files selected.</p>
+              <p class="upload-help upload-note">Files are processed through the normal pipeline and moved to <code>data/processed</code>.</p>
+            </form>
+          </section>
+        </div>
+
+        <aside class="side-column" aria-labelledby="guide-title">
+          <section class="card guide-card">
+            <span class="section-kicker">HOW IT WORKS</span>
+            <h2 id="guide-title">From file to answer</h2>
+            <ol class="steps">
+              <li><span class="step-number">1</span><div><strong>Upload</strong><p>Your files enter the raw document queue.</p></div></li>
+              <li><span class="step-number">2</span><div><strong>Index</strong><p>Documents become searchable chunks with embeddings.</p></div></li>
+              <li><span class="step-number">3</span><div><strong>Ask</strong><p>The answer is grounded in retrieved evidence.</p></div></li>
+            </ol>
+            <div class="retrieval-summary">
+              <h3>How retrieval finds evidence</h3>
+              <p><strong>Semantic search</strong> finds conceptually similar content, <strong>keyword search (BM25)</strong> finds exact words, names, IDs, and technical terms, and <strong>hybrid search</strong> combines both to improve retrieval across different kinds of documents.</p>
+            </div>
+          </section>
+          <section class="card evaluation-intro" aria-labelledby="evaluation-intro-title">
+            <span class="section-kicker">QUALITY CHECKS</span>
+            <h2 id="evaluation-intro-title">Test the retrieval</h2>
+            <p>Run a quick evidence check or a slower end-to-end answer check against the built-in test questions.</p>
+            <div class="evaluation-actions">
+              <button id="evaluate-button" class="secondary-button" type="button">Fast retrieval check</button>
+              <button id="full-evaluate-button" class="text-button" type="button">Full answer check <span aria-hidden="true">&#8594;</span></button>
+            </div>
+          </section>
+          <section class="card metrics-guide" aria-labelledby="metrics-guide-title">
+            <span class="section-kicker">RETRIEVAL METRICS</span>
+            <h2 id="metrics-guide-title">Recall &amp; Precision</h2>
+            <p class="metrics-guide-intro">These metrics explain whether the retriever finds the right evidence and keeps irrelevant results out.</p>
+            <div class="metric-explanations">
+              <article class="metric-explanation">
+                <div class="metric-label"><span class="metric-symbol" aria-hidden="true">R</span><h3>Recall</h3></div>
+                <p>Of all the relevant chunks that exist, how many did we retrieve?</p>
+                <code>relevant chunks retrieved &divide; all relevant chunks</code>
+                <p class="metric-example"><strong>High recall:</strong> fewer important facts are missed.</p>
+              </article>
+              <article class="metric-explanation">
+                <div class="metric-label"><span class="metric-symbol" aria-hidden="true">P</span><h3>Precision</h3></div>
+                <p>Of the chunks we retrieved, how many are actually relevant?</p>
+                <code>relevant chunks retrieved &divide; chunks retrieved</code>
+                <p class="metric-example"><strong>High precision:</strong> less distracting evidence reaches the answer.</p>
+              </article>
+            </div>
+            <p class="metrics-note"><strong>In practice:</strong> Recall helps prevent missing context; Precision helps keep answers focused. The fast retrieval check reports Precision@5 and Recall@5 from the built-in labeled questions.</p>
+          </section>
+        </aside>
+      </div>
+
+      <section id="evaluation-card" class="card hidden results-section" aria-labelledby="evaluation-title">
+        <div class="section-heading"><div><span class="section-kicker">QUALITY REPORT</span><h2 id="evaluation-title">Retrieval evaluation</h2></div><span id="evaluation-summary"></span></div>
+        <div id="evaluation-metrics" class="metrics"></div>
+        <div id="evaluation-results" class="evaluation-results"></div>
+      </section>
+
+    </main>
+    <footer class="footer"><span>RAG Workbench</span><span>Local document testing environment</span></footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

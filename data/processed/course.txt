@@ -1,0 +1,59 @@
+
+# Course Information: Introduction to Artificial Intelligence
+
+- Dataset purpose: Search and retrieval testing.
+- Dataset version: 3.
+
+- Course code: AI-101.
+
+- Department: Computer Science.
+
+- Course level: Undergraduate.
+
+- Course duration: 14 weeks.
+
+- Credit hours: 3.
+
+- Delivery format: Two lectures and one laboratory session each week.
+
+- Prerequisites for AI-101: Basic Python programming and introductory statistics.
+
+- Course description: This course introduces artificial intelligence, machine learning, natural language processing, embeddings, vector databases, and retrieval-augmented generation.
+
+- Learning outcome 1: Explain the difference between artificial intelligence, machine learning, and deep learning.
+- Learning outcome 2: Prepare and clean text documents for search.
+- Learning outcome 3: Explain how embeddings represent the meaning of text.
+- Learning outcome 4: Build a document search system with ChromaDB.
+- Learning outcome 5: Evaluate retrieval accuracy using test questions.
+- Modules : 
+- Module 1: Artificial intelligence foundations.
+- Module 2: Supervised and unsupervised learning.
+- Module 3: Python text processing and document loading.
+- Module 4: Text chunking and metadata.
+- Module 5: Embeddings and semantic similarity.
+- Module 6: Vector databases and retrieval.
+- Module 7: Retrieval-augmented generation.
+- Module 8: Evaluation, bias, privacy, and responsible AI.
+
+- Assessment weight for programming assignments: 25 percent.
+
+- Assessment weight for laboratory exercises: 20 percent.
+
+- Assessment weight for the midterm examination: 20 percent.
+
+- Assessment weight for the final project: 25 percent of the course grade.
+
+- Assessment weight for class participation: 10 percent.
+
+- Assessment rule: The assessment percentages add up to 100 percent.
+
+- Final project requirement 1: Use at least two source documents.
+- Final project requirement 2: Create searchable chunks with source metadata.
+- Final project requirement 3: Store document embeddings in a vector database.
+- Final project requirement 4: Test the search system with at least ten questions.
+- Final project requirement 5: Report successful searches, failed searches, and limitations.
+
+- Required software: Python 3.11 or later.
+- Required software: ChromaDB and Sentence Transformers.
+- Recommended editor: Visual Studio Code or Jupyter Notebook.
+- Student support: Technical questions should include the error message and reproduction steps.
